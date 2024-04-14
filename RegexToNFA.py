@@ -151,14 +151,21 @@ class NFA:
                 if char != "]":
                     rangeSymbol += char
                     
-                    if char == regex[-1]: #[A-Z case
-                        print("Invalid input: Last character cannot be a special character: " + rangeSymbol)
+                    if index == len(regex) - 1: #[A-Z case]
+                        print("Invalid input as the parentheses are not well formed: " + rangeSymbol)
                         return None
                 else:
                     rangeSymbol += "]"
                     if rangeSymbol[-2] == "-": #[A-] case
-                        print("Invalid input as the parentheses are not well formed: " + rangeSymbol)
+                        print("Invalid input as the range is incomplete: " + rangeSymbol)
                         return None
+                    if rangeSymbol[1] == "-": #[-A] case
+                        print("Invalid input as the range is incomplete: " + rangeSymbol)
+                        return None
+                    if not (any(char.isalnum() for char in rangeSymbol[1:-1])): # Check if rangeSymbol contains alphanumeric characters
+                        print("Invalid input as the range didn't contain alphanumeric characters: " + rangeSymbol)
+                        return None
+                    
                     insideRange = False
                     new_nfa = NFA()
                     new_start = new_nfa.add_state()
@@ -266,7 +273,7 @@ def add_concatenation(regex):
     clearResult = []
     for i, char in enumerate(regex):
         result.append(char)
-        if i < len(regex) - 1 and regex[i+1] != ')' and regex[i+1] not in ['*', '|', ')'] and char not in ['(', '|'] and char != '&':
+        if i < len(regex) - 1 and regex[i+1] != ')' and regex[i+1] not in ['*', '+' , '|', '?' , ')'] and char not in ['(', '|'] and char != '&':
             result.append('&')  # Add concatenation symbol '?'
     
     # clear the result from the '&' symbol if it is between the brackets []
@@ -302,9 +309,9 @@ def shunting_yard(regex):
                 i = closing_bracket_index + 1
             else:
                 # If closing bracket is not found
-                print("Invalid input: Last character cannot be a special character ")
+                print("Invalid input as the parentheses are not well formed. ")
                 return None
-        elif char.isalpha():
+        elif char.isalnum():
             output.append(char)
             i += 1
         elif char == '(':
@@ -385,32 +392,80 @@ def graph_nfa_from_json(json_data):
 
     return graph
 
+def validate_regex(regex):
+    # Check if regex is empty
+    if not regex:
+        print("Error: Regular expression is empty.")
+        return None
+    
+    # Check if regex contains invalid characters
+    invalid_chars = set(regex) - set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+?|().[]-")
+    if invalid_chars:
+        print("Error: Regular expression contains invalid characters:", invalid_chars)
+        return None
+    
+    # Check if parentheses are well-formed
+    stack = []
+    for char in regex:
+        if char == '(':
+            stack.append(char)
+        elif char == ')':
+            if not stack or stack.pop() != '(':
+                print("Error: Unbalanced parentheses.")
+                return None
+    if stack:
+        print("Error: Unbalanced parentheses.")
+        return None
+    
+    # Check if quantifiers are applied to valid elements
+    quantifier_chars = "*+?"
+    for i, char in enumerate(regex):
+        if char in quantifier_chars:
+            if i == 0 or regex[i-1] in quantifier_chars or regex[i-1] == '|' or( i != len(regex) - 1 and regex[i+1] in quantifier_chars):
+                print("Error: Invalid use of quantifier:", char)
+                return None
+    
+    # Check if ranges in character classes are well-formed
+    inside_range = False
+    for i, char in enumerate(regex):
+        if char == '[':
+            inside_range = True
+        elif char == ']':
+            if inside_range:
+                inside_range = False
+            else:
+                print("Error: Unbalanced square brackets.")
+                return None
+        elif inside_range:
+            if char == '-':
+                if i == 0 or i == len(regex) - 1 or regex[i-1] == '[' or regex[i+1] == ']':
+                    print("Error: Invalid use of dash in character.")
+                    return None
+    
+    return regex
 
 def main():
     regex = input("Enter a regular expression: ")
-    postfix_notation = shunting_yard(regex)
-    print("Postfix notation:", postfix_notation)
-    if postfix_notation:
-        nfa = convert_to_nfa(postfix_notation)
-    if nfa:
-        json_output = nfa.generate_json()
-        print("NFA json is:")
-        print(json_output)
+    regex = validate_regex(regex)
+    if regex:
+        postfix_notation = shunting_yard(regex)
+        print("Postfix notation:", postfix_notation)
+        if postfix_notation:
+            nfa = convert_to_nfa(postfix_notation)
+            if nfa:
+                json_output = nfa.generate_json()
+                print("NFA json is:")
+                print(json_output)
+                with open('nfa_output.json', 'w') as file:
+                    file.write(json_output)
+                print("NFA json file has been created.")
 
-    # Create graph from JSON data
-    nfa_graph = graph_nfa_from_json(json_output)
-
-    # Save the graph as a PNG file
-    nfa_graph.write_png('nfa_graph.png')
-
-    # Display the PNG image
-    display(Image(filename='nfa_graph.png'))
-    
-    # Example usage:
-    # regex = "a|b|c|d(ali)[a-z]"
-
-    # regex_with_parentheses = add_parentheses(regex)
-    # print("Regex with parentheses:", regex_with_parentheses)
+                # Create graph from JSON data
+                nfa_graph = graph_nfa_from_json(json_output)
+                # Save the graph as a PNG file
+                nfa_graph.write_png('nfa_graph.png')
+                # Display the PNG image
+                display(Image(filename='nfa_graph.png'))
 
 if __name__ == "__main__":
     main()
