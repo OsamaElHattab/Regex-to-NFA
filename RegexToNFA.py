@@ -1,4 +1,6 @@
 import json
+import pydot
+from IPython.display import display, Image
 
 index = 0
 
@@ -350,6 +352,38 @@ def add_parentheses(regex):
     
     return ''.join(result)
 
+def graph_nfa_from_json(json_data):
+    graph = pydot.Dot("NFA_Graph", graph_type="digraph")
+
+    # Parse JSON data
+    nfa = json.loads(json_data)
+
+    # Add states and transitions to the graph
+    for state, transitions in nfa.items():
+        if state != 'startingState':
+            if transitions.get('isTerminatingState', False):
+                node = pydot.Node(state, label=state, shape='doublecircle')
+            else:
+                node = pydot.Node(state, label=state, shape='circle')
+            graph.add_node(node)
+
+            for symbol, next_states in transitions.items():
+                if symbol != 'isTerminatingState':
+                    for next_state in next_states:
+                        if symbol == 'ε':
+                            edge = pydot.Edge(state, next_state, label='ε', style='solid')
+                        else:
+                            edge = pydot.Edge(state, next_state, label=symbol, style='solid')
+                        graph.add_edge(edge)
+
+    # Set starting state
+    starting_state = nfa['startingState']
+    starting_node = pydot.Node('.', label='', shape='point')
+    graph.add_node(starting_node)
+    start_end_edge = pydot.Edge(starting_node, starting_state, label='start', style='solid')
+    graph.add_edge(start_end_edge)
+
+    return graph
 
 
 def main():
@@ -362,6 +396,15 @@ def main():
         json_output = nfa.generate_json()
         print("NFA json is:")
         print(json_output)
+
+    # Create graph from JSON data
+    nfa_graph = graph_nfa_from_json(json_output)
+
+    # Save the graph as a PNG file
+    nfa_graph.write_png('nfa_graph.png')
+
+    # Display the PNG image
+    display(Image(filename='nfa_graph.png'))
     
     # Example usage:
     # regex = "a|b|c|d(ali)[a-z]"
